@@ -1,0 +1,6 @@
+{
+  "name": "neuschwanstein-ticket-watcher",
+  "private": true,
+  "scripts": { "watch": "node watch.js", "test": "node --test test/*.test.js" },
+  "dependencies": { "playwright": "1.56.1" }
+}

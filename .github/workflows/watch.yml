@@ -1,0 +1,64 @@
+name: Watch tickets
+
+# A "chain" run watches for about 50 minutes and then starts the next chain run.
+# There is no cron on purpose: scheduled runs are listed under the account that last edited the
+# workflow, while chained runs are listed as github-actions. If the chain ever stops, the site emails
+# the owner (watcher alarm) and a manual run with "chain" ticked restarts it.
+on:
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: Keep watching and start the next run when done
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  watch:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    # One watcher at a time; a new run waits for the previous one to finish.
+    concurrency:
+      group: watcher
+      cancel-in-progress: false
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    env:
+      TZ: Europe/Berlin
+      HOME: /root
+    steps:
+      # Set the repository variable WATCHER_PAUSED to 'true' to stop watching.
+      - name: Check the watcher is switched on
+        id: active
+        run: echo "on=${{ vars.WATCHER_PAUSED == 'true' && 'false' || 'true' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.active.outputs.on == 'true'
+      - run: npm ci --no-audit --no-fund
+        if: steps.active.outputs.on == 'true'
+      - name: Pass Bing Webmaster numbers to the dashboard
+        if: steps.active.outputs.on == 'true' && inputs.chain
+        continue-on-error: true
+        timeout-minutes: 5
+        run: node bing-fetch.mjs
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          WATCHER_TOKEN: ${{ secrets.WATCHER_TOKEN }}
+      - name: Check for open tours (every 3 minutes)
+        if: steps.active.outputs.on == 'true'
+        # A step timeout (unlike the job timeout) still lets "Start the next run" go ahead.
+        timeout-minutes: 58
+        run: node watch.js
+        env:
+          RUN_MINUTES: ${{ inputs.chain && '50' || '1' }}
+          INTERVAL_SECONDS: '180'
+          SITE_URL: ${{ vars.SITE_URL }}
+          WATCHER_TOKEN: ${{ secrets.WATCHER_TOKEN }}
+      - name: Start the next run
+        if: always() && inputs.chain && steps.active.outputs.on == 'true'
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/watch.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"chain":"true"}}'
