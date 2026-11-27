@@ -44,7 +44,7 @@ jobs:
         timeout-minutes: 5
         run: node bing-fetch.mjs
         env:
-          SITE_URL: ${{ vars.SITE_URL }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://neuschwansteincastleticketalerts.com' }}
           WATCHER_TOKEN: ${{ secrets.WATCHER_TOKEN }}
       - name: Check for open tours (every 3 minutes)
         if: steps.active.outputs.on == 'true'
@@ -54,7 +54,7 @@ jobs:
         env:
           RUN_MINUTES: ${{ inputs.chain && '50' || '1' }}
           INTERVAL_SECONDS: '180'
-          SITE_URL: ${{ vars.SITE_URL }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://neuschwansteincastleticketalerts.com' }}
           WATCHER_TOKEN: ${{ secrets.WATCHER_TOKEN }}
       - name: Start the next run
         if: always() && inputs.chain && steps.active.outputs.on == 'true'
